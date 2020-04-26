@@ -48,14 +48,19 @@
                 <i slot="suffix" class="el-input__icon el-icon-close" v-if="searchText" @click="cleanSearch" style="cursor: pointer"></i>
               </el-input>
             </el-col>
-            <el-col :span="6">
+            <el-col :span="4">
               <div class="item-base copy round" :class="{ active: isMultiple(choosedList)}" @click="multiCopy">
-                <i class="el-icon-document"></i> 批量复制
+                复制
               </div>
             </el-col>
-            <el-col :span="6">
+            <el-col :span="4">
               <div class="item-base delete round" :class="{ active: isMultiple(choosedList)}" @click="multiRemove">
-                <i class="el-icon-delete"></i> 批量删除
+                删除
+              </div>
+            </el-col>
+            <el-col :span="4">
+              <div class="item-base all-pick round" :class="{ active: true}" @click="multiRemove">
+                全选
               </div>
             </el-col>
           </el-row>
@@ -82,7 +87,7 @@
               <i class="el-icon-document" @click="copy(item)"></i>
               <i class="el-icon-edit-outline" @click="openDialog(item)"></i>
               <i class="el-icon-delete" @click="remove(item.id)"></i>
-              <el-checkbox v-model="choosedList[item.id]" class="pull-right" @change=" handleBarActive = true"></el-checkbox>
+              <el-checkbox v-model="choosedList[item.id]" class="pull-right" @change="(val) => handleChooseImage(val, index)"></el-checkbox>
             </div>
           </el-col>
         </el-row>
@@ -106,7 +111,7 @@
 // @ts-ignore
 import gallerys from 'vue-gallery'
 import pasteStyle from '#/utils/pasteTemplate'
-import { Component, Vue } from 'vue-property-decorator'
+import { Component, Vue, Watch } from 'vue-property-decorator'
 import {
   ipcRenderer,
   clipboard,
@@ -133,6 +138,8 @@ export default class extends Vue {
   }
   choosedList: IObjT<boolean> = {}
   choosedPicBed: string[] = []
+  lastChoosed: number = -1
+  isShiftKeyPress: boolean = false
   searchText = ''
   handleBarActive = false
   pasteStyle = ''
@@ -151,6 +158,18 @@ export default class extends Vue {
       vm.getPicBeds()
     })
   }
+  @Watch('$route')
+  handleRouteUpdate (to: any, from: any) {
+    if (from.name === 'gallery') {
+      console.log('move')
+      this.clearChoosedList()
+      document.removeEventListener('keydown', this.handleDetectShiftKey)
+      document.removeEventListener('keyup', this.handleDetectShiftKey)
+    } else if (to.name === 'gallery') {
+      document.addEventListener('keydown', this.handleDetectShiftKey)
+      document.addEventListener('keyup', this.handleDetectShiftKey)
+    }
+  }
   created () {
     ipcRenderer.on('updateGallery', (event: IpcRendererEvent) => {
       this.$nextTick(() => {
@@ -159,6 +178,16 @@ export default class extends Vue {
     })
     ipcRenderer.send('getPicBeds')
     ipcRenderer.on('getPicBeds', this.getPicBeds)
+  }
+  mounted () {
+    (window as any).vmm = this
+    document.addEventListener('keydown', this.handleDetectShiftKey)
+    document.addEventListener('keyup', this.handleDetectShiftKey)
+  }
+  handleDetectShiftKey (event: KeyboardEvent) {
+    if (event.keyCode === 16) {
+      this.isShiftKeyPress = !this.isShiftKeyPress
+    }
   }
   get filterList () {
     return this.getGallery()
@@ -199,6 +228,23 @@ export default class extends Vue {
       }
     }
     return this.images
+  }
+  @Watch('filterList')
+  handleFilterListChange () {
+    this.clearChoosedList()
+  }
+  handleChooseImage (val: boolean, index: number) {
+    console.log(val, index)
+    if (val === true) {
+      this.lastChoosed = index
+    }
+  }
+  clearChoosedList () {
+    this.isShiftKeyPress = false
+    Object.keys(this.choosedList).forEach(key => {
+      this.choosedList[key] = false
+    })
+    this.lastChoosed = -1
   }
   zoomImage (index: number) {
     this.idx = index
@@ -307,7 +353,8 @@ export default class extends Vue {
             this.$db.removeById('uploaded', key)
           }
         })
-        this.choosedList = {}
+        this.clearChoosedList()
+        this.choosedList = {} // 只有删除才能将这个置空
         this.getGallery()
         const obj = {
           title: '操作结果',
@@ -399,6 +446,13 @@ export default class extends Vue {
     &.active
       cursor pointer
       background #F15140
+      color #fff
+  &.all-pick
+    cursor not-allowed
+    background #F47466
+    &.active
+      cursor pointer
+      background #F1BE48
       color #fff
 #gallery-view
   position relative
